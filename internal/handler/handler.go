@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"devops-go-vault-api"
 	"devops-go-vault-api/internal/converter"
 	"devops-go-vault-api/internal/k8ssecret"
 	"devops-go-vault-api/internal/vault"
@@ -9,6 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 	"io/ioutil"
 	"net/http"
+	"strings"
 )
 
 type Request struct {
@@ -18,6 +20,17 @@ type Request struct {
 
 type SecretRequest struct {
 	Data map[string]string `json:"data"`
+}
+
+type DBInfo struct {
+	Data map[string]string `json:"data"`
+}
+
+type GenerateRequest struct {
+	DBInfo      map[string]string `json:"dbInfo"`
+	Host        string            `json:"host"`
+	SGBD        string            `json:"sgbd"`
+	Application string            `json:"application"`
 }
 
 func StoreHandler(w http.ResponseWriter, r *http.Request) {
@@ -100,6 +113,77 @@ func DecryptSecretHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonResponse, err := json.Marshal(decodedData)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(jsonResponse)
+}
+
+func JsonHandler(w http.ResponseWriter, r *http.Request) {
+	config, err := devops_go_vault_api.ParseIniFile("config.ini")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	json1 := devops_go_vault_api.TransformToJson1(config)
+	json2 := devops_go_vault_api.TransformToJson2(config)
+
+	result := map[string]interface{}{
+		"output1": json1,
+		"output2": json2,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+func GenerateHandler(w http.ResponseWriter, r *http.Request) {
+	var req GenerateRequest
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	err = json.Unmarshal(body, &req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if req.Host == "" || req.SGBD == "" || req.Application == "" || len(req.DBInfo) == 0 {
+		http.Error(w, "All fields are required", http.StatusBadRequest)
+		return
+	}
+
+	lowerSGBD := strings.ToLower(req.SGBD) // SGBD em minúsculas para a URL
+	upperSGBD := strings.ToUpper(req.SGBD) // SGBD em maiúsculas para o prefixo das chaves
+	templatePath := fmt.Sprintf("secret/data/general/dba/%s/%s/%s", lowerSGBD, req.Host, req.Application)
+
+	templateOutput := make(map[string]string)
+	for key := range req.DBInfo {
+		upperKey := strings.ToUpper(key)
+		templateKey := fmt.Sprintf("{{%s::%s_%s}}", templatePath, upperSGBD, upperKey)
+		templateOutput[key] = templateKey
+	}
+
+	renamedOutput := make(map[string]string)
+	for key := range req.DBInfo {
+		upperKey := strings.ToUpper(key)
+		renamedKey := fmt.Sprintf("%s_%s", upperSGBD, upperKey)
+		renamedOutput[renamedKey] = req.DBInfo[key]
+	}
+
+	response := map[string]interface{}{
+		"template_output": templateOutput,
+		"renamed_output":  renamedOutput,
+	}
+
+	jsonResponse, err := json.Marshal(response)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
