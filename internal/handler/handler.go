@@ -33,6 +33,10 @@ type GenerateRequest struct {
 	Application string            `json:"application"`
 }
 
+type DeleteSecretRequest struct {
+	Path string `json:"path"`
+}
+
 func StoreHandler(w http.ResponseWriter, r *http.Request) {
 	var requests []Request
 	err := json.NewDecoder(r.Body).Decode(&requests)
@@ -181,6 +185,53 @@ func GenerateHandler(w http.ResponseWriter, r *http.Request) {
 	response := map[string]interface{}{
 		"template_output": templateOutput,
 		"renamed_output":  renamedOutput,
+	}
+
+	jsonResponse, err := json.Marshal(response)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(jsonResponse)
+}
+
+func DeleteSecretHandler(w http.ResponseWriter, r *http.Request) {
+	var req DeleteSecretRequest
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	err = json.Unmarshal(body, &req)
+	if err != nil || req.Path == "" {
+		http.Error(w, "Invalid or missing path", http.StatusBadRequest)
+		return
+	}
+
+	// Checar se o caminho tem múltiplos segredos (indicativo de pasta)
+	secretList, err := vault.ListSecrets(req.Path)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if len(secretList) > 0 {
+		http.Error(w, "Cannot delete a folder with multiple secrets", http.StatusForbidden)
+		return
+	}
+
+	// Deletar o segredo específico
+	err = vault.DeleteSecret(req.Path)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]string{
+		"message": fmt.Sprintf("Secret at path '%s' deleted successfully", req.Path),
 	}
 
 	jsonResponse, err := json.Marshal(response)
