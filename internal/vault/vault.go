@@ -27,7 +27,6 @@ func StoreInVault(path string, data map[string]string) error {
 }
 
 func getClient() (*api.Client, error) {
-	// Configura o cliente do Vault usando o endereço do VAULT_ADDRESS
 	conf := api.DefaultConfig()
 	conf.Address = config.VaultAddress // Usa o endereço do Vault do .env
 
@@ -36,7 +35,6 @@ func getClient() (*api.Client, error) {
 		return nil, err
 	}
 
-	// Utilize o token do Vault do arquivo .env
 	client.SetToken(config.VaultToken)
 
 	return client, nil
@@ -74,7 +72,6 @@ func DeleteSecret(path string) error {
 		return err
 	}
 
-	// No KV v2, devemos usar o prefixo /metadata/ para deletar um segredo
 	metadataPath := fmt.Sprintf("secret/metadata/%s", path)
 
 	_, err = client.Logical().Delete(metadataPath)

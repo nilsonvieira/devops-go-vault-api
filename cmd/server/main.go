@@ -10,7 +10,6 @@ import (
 )
 
 func main() {
-	// Load configuration
 	config.LoadConfig()
 
 	router := mux.NewRouter()

@@ -211,7 +211,6 @@ func DeleteSecretHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Checar se o caminho tem múltiplos segredos (indicativo de pasta)
 	secretList, err := vault.ListSecrets(req.Path)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -223,7 +222,6 @@ func DeleteSecretHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Deletar o segredo específico
 	err = vault.DeleteSecret(req.Path)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
