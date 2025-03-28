@@ -18,5 +18,6 @@ func main() {
 	router.HandleFunc("/decSecret", handler.DecryptSecretHandler).Methods("POST")
 	router.HandleFunc("/generate", handler.GenerateHandler).Methods("POST")
 	router.HandleFunc("/deleteSecret", handler.DeleteSecretHandler).Methods("DELETE")
+	router.HandleFunc("/jsonToVaultJson", handler.GenerateSecretHandler).Methods("POST")
 	log.Fatal(http.ListenAndServe(":8080", router))
 }

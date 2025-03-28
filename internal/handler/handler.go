@@ -37,6 +37,19 @@ type DeleteSecretRequest struct {
 	Path string `json:"path"`
 }
 
+type DBConfig struct {
+	DB       string `json:"DB"`
+	Host     string `json:"HOST"`
+	Password string `json:"PASSWORD"`
+	Port     string `json:"PORT"`
+	Username string `json:"USERNAME"`
+}
+
+type SecretPayload struct {
+	Path string                 `json:"path"`
+	Data map[string]interface{} `json:"data"`
+}
+
 func StoreHandler(w http.ResponseWriter, r *http.Request) {
 	var requests []Request
 	err := json.NewDecoder(r.Body).Decode(&requests)
@@ -240,4 +253,92 @@ func DeleteSecretHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(jsonResponse)
+}
+
+func GenerateSecretHandler(w http.ResponseWriter, r *http.Request) {
+	var dbConfigs []map[string]string
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request body", http.StatusInternalServerError)
+		return
+	}
+
+	err = json.Unmarshal(body, &dbConfigs)
+	if err != nil {
+		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
+		return
+	}
+
+	application := r.URL.Query().Get("application")
+	if application == "" {
+		http.Error(w, "Missing application parameter", http.StatusBadRequest)
+		return
+	}
+
+	var result []SecretPayload
+	pathDataMap := make(map[string]map[string]interface{})
+	legacyData := make(map[string]interface{})
+
+	for _, config := range dbConfigs {
+		var dbType, port, host string
+		for key, value := range config {
+			if strings.HasSuffix(key, "_PORT") {
+				port = value
+			}
+			if strings.HasSuffix(key, "_HOST") {
+				host = value
+			}
+		}
+
+		switch port {
+		case "1433":
+			dbType = "sqlserver"
+		case "49600":
+			dbType = "sqlserver"
+		case "5432":
+			dbType = "postgres"
+		case "1521":
+			dbType = "oracle"
+		default:
+			http.Error(w, "Unsupported port", http.StatusBadRequest)
+			return
+		}
+
+		upperDBType := strings.ToUpper(dbType)
+
+		path := fmt.Sprintf("secret/data/general/dba/%s/%s/%s", dbType, host, application)
+
+		if _, exists := pathDataMap[path]; !exists {
+			pathDataMap[path] = make(map[string]interface{})
+		}
+
+		for key, value := range config {
+			upperKey := fmt.Sprintf("%s_%s", upperDBType, strings.ToUpper(key))
+			pathDataMap[path][upperKey] = value
+
+			legacyKey := strings.TrimPrefix(upperKey, upperDBType+"_")
+			legacyData[legacyKey] = fmt.Sprintf("{{%s::%s}}", path, upperKey)
+		}
+	}
+
+	for path, data := range pathDataMap {
+		result = append(result, SecretPayload{
+			Path: path,
+			Data: data,
+		})
+	}
+
+	result = append(result, SecretPayload{
+		Path: "secret/data/legacy/" + application,
+		Data: legacyData,
+	})
+
+	response, err := json.Marshal(result)
+	if err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(response)
 }
