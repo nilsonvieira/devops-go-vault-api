@@ -19,5 +19,8 @@ func main() {
 	router.HandleFunc("/generate", handler.GenerateHandler).Methods("POST")
 	router.HandleFunc("/deleteSecret", handler.DeleteSecretHandler).Methods("DELETE")
 	router.HandleFunc("/jsonToVaultJson", handler.GenerateSecretHandler).Methods("POST")
+	router.HandleFunc("/updatePassword", handler.UpdatePasswordHandler).Methods("POST")
+
+	log.Printf("Iniciando servidor na porta 8080...")
 	log.Fatal(http.ListenAndServe(":8080", router))
 }
